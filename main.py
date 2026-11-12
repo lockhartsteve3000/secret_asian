@@ -1,6 +1,8 @@
 import argparse
+import json
 import os
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -26,9 +28,15 @@ def main():
         base_url="https://openrouter.ai/api/v1",
         api_key=api_key,
     )
-    messages = [
-        {"role": "system", "content": system_prompt},
-    ]
+
+    memory_file = Path("conversation.json")
+    if memory_file.exists():
+        with open(memory_file, "r") as f:
+            messages = json.load(f)
+    else:
+        messages = [
+            {"role": "system", "content": system_prompt},
+        ]
 
     while True:
         if args.user_prompt:
@@ -57,7 +65,7 @@ def main():
                 print(f"Prompt tokens: {response.usage.prompt_tokens}")
                 print(f"Response tokens: {response.usage.completion_tokens}")
 
-            messages.append(message)
+            messages.append(message.model_dump())
 
             if message.tool_calls:
                 for tool_call in message.tool_calls:
@@ -74,6 +82,8 @@ def main():
             print("agent did not finish its task within the iteration limit")
             sys.exit(1)
 
+        with open(memory_file, "w") as f:
+            json.dump(messages, f)
 
 if __name__ == "__main__":
     main()
