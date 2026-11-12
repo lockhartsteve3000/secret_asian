@@ -1,5 +1,4 @@
 import argparse
-import json
 import os
 import sys
 
@@ -19,7 +18,7 @@ def main():
         raise RuntimeError("No api key found")
 
     parser = argparse.ArgumentParser(description="Chatbot")
-    parser.add_argument("user_prompt", type=str, help="User prompt")
+    parser.add_argument("user_prompt", type=str, help="User prompt", nargs="?")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
     args = parser.parse_args()
 
@@ -29,39 +28,52 @@ def main():
     )
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": args.user_prompt},
     ]
-    for _ in range(20):
-        response = client.chat.completions.create(
-            model="openrouter/free", messages=messages, tools=available_functions
-        )
 
-        message = response.choices[0].message
-
-        if response.usage is None:
-            raise RuntimeError("API response missing usage metadata")
-
-        if args.verbose:
-            print(f"User prompt: {args.user_prompt}")
-            print(f"Prompt tokens: {response.usage.prompt_tokens}")
-            print(f"Response tokens: {response.usage.completion_tokens}")
-
-        messages.append(message)
-
-        if message.tool_calls:
-            for tool_call in message.tool_calls:
-                tool_result = call_function(tool_call, verbose=args.verbose)
-                messages.append(tool_result)
-                print(tool_result["content"])
-        elif message.content:
-            print(message.content)
-            break
+    while True:
+        if args.user_prompt:
+            user_prompt = args.user_prompt
+            args.user_prompt = None
         else:
-            raise RuntimeError("No content or tool call returned by the model")
+            user_prompt = input("You: ")
 
-    else:
-        print("agent did not finish its task within the iteration limit")
-        sys.exit(1)
+        if user_prompt.lower() == "exit":
+            break
+
+        messages.append({"role": "user", "content": user_prompt})
+
+        for _ in range(20):
+            response = client.chat.completions.create(
+                model="openrouter/free", messages=messages, tools=available_functions
+            )
+
+            message = response.choices[0].message
+
+            if response.usage is None:
+                raise RuntimeError("API response missing usage metadata")
+
+            if args.verbose:
+                print(f"User prompt: {user_prompt}")
+                print(f"Prompt tokens: {response.usage.prompt_tokens}")
+                print(f"Response tokens: {response.usage.completion_tokens}")
+
+            messages.append(message)
+
+            if message.tool_calls:
+                for tool_call in message.tool_calls:
+                    tool_result = call_function(tool_call, verbose=args.verbose)
+                    messages.append(tool_result)
+                    print(tool_result["content"])
+            elif message.content:
+                print(message.content)
+                break
+            else:
+                raise RuntimeError("No content or tool call returned by the model")
+
+        else:
+            print("agent did not finish its task within the iteration limit")
+            sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
